@@ -340,6 +340,79 @@ class Game {
         
         // Restore context
         this.ctx.restore();
+
+        this.renderHUD();
+    }
+
+    renderHUD() {
+        if (!this.player) {
+            return;
+        }
+
+        const ctx = this.ctx;
+        const barWidth = Math.min(260, this.canvas.width * 0.35);
+        const barHeight = 14;
+        const spacing = 18;
+        const padding = 24;
+        const totalHeight = barHeight * 2 + spacing;
+        const startX = padding;
+        const startY = this.canvas.height - padding - totalHeight;
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(8, 10, 20, 0.65)';
+        ctx.beginPath();
+        ctx.roundRect(startX - 14, startY - 28, barWidth + 28, totalHeight + 46, 10);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(80, 98, 148, 0.45)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.font = '13px "Segoe UI", Arial, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#e6ebff';
+        ctx.fillText('Metals', startX, startY - 10);
+
+        const steelRatio = this.player.getSteelRatio?.() ?? 0;
+        const ironRatio = this.player.getIronRatio?.() ?? 0;
+
+        this.drawResourceBar(ctx, startX, startY, barWidth, barHeight, steelRatio, 'Steel', ALLOMANCY_PUSH_COLOR, 'rgba(20, 44, 70, 0.55)');
+        this.drawResourceBar(ctx, startX, startY + barHeight + spacing, barWidth, barHeight, ironRatio, 'Iron', ALLOMANCY_PULL_COLOR, 'rgba(58, 20, 38, 0.55)');
+
+        ctx.restore();
+    }
+
+    drawResourceBar(ctx, x, y, width, height, ratio, label, colorArray, backdrop) {
+        const clamped = clamp(ratio ?? 0, 0, 1);
+        const [r, g, b] = colorArray;
+
+        ctx.save();
+
+        ctx.fillStyle = backdrop;
+        ctx.fillRect(x, y, width, height);
+
+        if (clamped > 0) {
+            const gradient = ctx.createLinearGradient(x, y, x + width, y);
+            gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.85)`);
+            gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.35)`);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(x, y, width * clamped, height);
+        }
+
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(x, y, width, height);
+
+        ctx.font = '12px "Segoe UI", Arial, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#dce3ff';
+        ctx.fillText(label, x, y - 6);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#f8fbff';
+        const percent = Math.round(clamped * 100);
+        ctx.fillText(`${percent}%`, x + width, y - 6);
+
+        ctx.restore();
     }
 
     drawStars() {
@@ -485,9 +558,6 @@ class Game {
     }
 }
 
-const ALLOMANCY_PUSH_COLORtemp = '#24c0f0';
-const ALLOMANCY_PULL_COLORtemp = '#ce2071';
-const ALLOMANCY_AIM_COLORtemp  = '#c4d9ff';
 const ALLOMANCY_PUSH_COLOR = [36, 192, 240];
 const ALLOMANCY_PULL_COLOR = [206, 32, 113];
 const ALLOMANCY_AIM_COLOR  = [196, 217, 255];
@@ -702,7 +772,9 @@ const BIOME_CONFIGS = {
         manholeChance: 0.8,
         manholeCountRange: [1, 3],
         treeChance: 0.2,
-        treeCountRange: [0, 2]
+        treeCountRange: [0, 2],
+        metalVialChance: 0.3,
+        metalVialCountRange: [0, 1]
     },
     noble_housing: {
         temperature: 0.7,
@@ -717,7 +789,9 @@ const BIOME_CONFIGS = {
         manholeChance: 0.2,
         manholeCountRange: [1, 2],
         treeChance: 0.3,
-        treeCountRange: [0, 3]
+        treeCountRange: [0, 3],
+        metalVialChance: 0.25,
+        metalVialCountRange: [0, 1]
     },
     town_square: {
         temperature: 0.5,
@@ -732,7 +806,9 @@ const BIOME_CONFIGS = {
         manholeChance: 0.35,
         manholeCountRange: [0, 2],
         treeChance: 1,
-        treeCountRange: [4, 6]
+        treeCountRange: [4, 6],
+        metalVialChance: 0.05,
+        metalVialCountRange: [0, 1]
     },
     marketplace: {
         temperature: 0.3,
@@ -747,7 +823,9 @@ const BIOME_CONFIGS = {
         manholeChance: 0.45,
         manholeCountRange: [1, 3],
         treeChance: 0.6,
-        treeCountRange: [1, 5]
+        treeCountRange: [1, 5],
+        metalVialChance: 0.1,
+        metalVialCountRange: [0, 1]
     },
     grand_keep: {
         temperature: 1,
@@ -762,7 +840,9 @@ const BIOME_CONFIGS = {
         manholeChance: 0.15,
         manholeCountRange: [0, 1],
         treeChance: 0.6,
-        treeCountRange: [2, 4]
+        treeCountRange: [2, 4],
+        metalVialChance: 0.75,
+        metalVialCountRange: [0, 1]
     },
     default: {
         temperature: 0.5,
@@ -775,7 +855,9 @@ const BIOME_CONFIGS = {
         streetLampHeightRange: [130, 160],
         streetLampChance: 0.8,
         manholeChance: 0.3,
-        manholeCountRange: [0, 2]
+        manholeCountRange: [0, 2],
+        metalVialChance: 0.2,
+        metalVialCountRange: [0, 1]
     }
 };
 
@@ -850,6 +932,15 @@ class Player {
         ];
         this.airAllomancyDirection = null;
         this.tiltAngle = 0;
+
+        // Metal reserves
+        this.maxSteelReserve = 120;
+        this.maxIronReserve = 120;
+        this.steelReserve = this.maxSteelReserve;
+        this.ironReserve = this.maxIronReserve;
+        this.steelBurnRate = 4
+        this.ironBurnRate = 4;
+        this.burstBurnAmount = 200;
     }
     
     update(deltaTime, keys, mouse, controller, world, camera) {
@@ -867,13 +958,14 @@ class Player {
         this.handleMovement(deltaTime, keys, controller, world);
         
         // Handle allomancy
-        this.handleAllomancy(mouse, controller, world, camera);
+        this.handleAllomancy(deltaTime, mouse, controller, world, camera);
         
         // Apply physics
         this.applyPhysics(deltaTime);
         
         // Check collisions with world
         this.checkCollisions(world);
+        this.checkVialPickups(world);
 
         this.updateTilt(deltaTime, world);
     }
@@ -912,6 +1004,72 @@ class Player {
         });
     }
 
+
+    getSteelRatio() {
+        if (!Number.isFinite(this.maxSteelReserve) || this.maxSteelReserve <= 0) {
+            return 0;
+        }
+        return clamp(this.steelReserve / this.maxSteelReserve, 0, 1);
+    }
+
+    getIronRatio() {
+        if (!Number.isFinite(this.maxIronReserve) || this.maxIronReserve <= 0) {
+            return 0;
+        }
+        return clamp(this.ironReserve / this.maxIronReserve, 0, 1);
+    }
+
+    hasSteelReserve() {
+        return this.steelReserve > 0.001;
+    }
+
+    hasIronReserve() {
+        return this.ironReserve > 0.001;
+    }
+
+    consumeSteel(deltaTime, multiplier = 1) {
+        const hadResource = this.hasSteelReserve();
+        if (!hadResource) {
+            this.steelReserve = 0;
+            return false;
+        }
+        const scaledTime = Math.max(deltaTime ?? 0, 0);
+        const burnMultiplier = Math.max(multiplier ?? 0, 0);
+        if (scaledTime > 0 && burnMultiplier > 0) {
+            const burn = this.steelBurnRate * burnMultiplier * scaledTime;
+            this.steelReserve = Math.max(0, this.steelReserve - burn);
+        }
+        if (this.steelReserve <= 0) {
+            this.steelReserve = 0;
+            this.steelTarget = null;
+        }
+        return hadResource;
+    }
+
+    consumeIron(deltaTime, multiplier = 1) {
+        const hadResource = this.hasIronReserve();
+        if (!hadResource) {
+            this.ironReserve = 0;
+            return false;
+        }
+        const scaledTime = Math.max(deltaTime ?? 0, 0);
+        const burnMultiplier = Math.max(multiplier ?? 0, 0);
+        if (scaledTime > 0 && burnMultiplier > 0) {
+            const burn = this.ironBurnRate * burnMultiplier * scaledTime;
+            this.ironReserve = Math.max(0, this.ironReserve - burn);
+        }
+        if (this.ironReserve <= 0) {
+            this.ironReserve = 0;
+            this.ironTarget = null;
+        }
+        return hadResource;
+    }
+
+    refillMetals() {
+        this.steelReserve = this.maxSteelReserve;
+        this.ironReserve = this.maxIronReserve;
+    }
+
     updateTilt(deltaTime, world) {
         let target = this.vx / this.maxSpeedX * 0.2;
 
@@ -920,7 +1078,7 @@ class Player {
         }
 
         target = clamp(target, -0.6, 0.6);
-        const lerp = Math.min(1, deltaTime * 10);
+        const lerp = Math.min(1, deltaTime * 8);
         this.tiltAngle += (target - this.tiltAngle) * lerp;
     }
     
@@ -966,7 +1124,7 @@ class Player {
                     this.hasJumpedSinceGround = true;
                     this.onGround = false;
                 } else {
-                    this.tryAllomancyBurst(combinedX, combinedY, shiftActive, world);
+                    this.tryAllomancyBurst(deltaTime, combinedX, combinedY, shiftActive, world);
                 }
             }
             
@@ -1000,14 +1158,32 @@ class Player {
             return;
         }
 
-        const influence = this.calculateMetalInfluence(metals);
+        const dirX = inputX / directionLength;
+        const dirY = inputY / directionLength;
+        const influenceData = this.calculateMetalInfluence(metals, { x: dirX, y: dirY });
+        const influence = influenceData.total;
         if (influence <= 0) {
             this.airAllomancyDirection = null;
             return;
         }
 
-        const dirX = inputX / directionLength;
-        const dirY = inputY / directionLength;
+        const baseConsumption = Math.max(0.4, influence * (shiftActive ? 1.2 : 0.7));
+        const steelShare = influence > 0 ? influenceData.steelContribution / influence : 0;
+        const ironShare = influence > 0 ? influenceData.ironContribution / influence : 0;
+        let resourcesOk = true;
+
+        if (steelShare > 0.001) {
+            resourcesOk = this.consumeSteel(deltaTime, baseConsumption * steelShare) && resourcesOk;
+        }
+        if (ironShare > 0.001) {
+            resourcesOk = this.consumeIron(deltaTime, baseConsumption * ironShare) && resourcesOk;
+        }
+
+        if (!resourcesOk) {
+            this.airAllomancyDirection = null;
+            return;
+        }
+
         const strengthValue = shiftActive ? this.shiftAllomancyMultiplier : 1;
         const force = this.airAllomancyForce * influence * strengthValue;
 
@@ -1028,7 +1204,7 @@ class Player {
         this.airAllomancyStrengthValue = strengthValue;
     }
 
-    tryAllomancyBurst(inputX, inputY, shiftActive, world) {
+    tryAllomancyBurst(deltaTime, inputX, inputY, shiftActive, world) {
         if (this.onGround || this.burstCooldownRemaining > 0) {
             return;
         }
@@ -1036,11 +1212,6 @@ class Player {
         const baseMetals = this.activeAirMetals.length ? this.activeAirMetals : this.getNearbyMetals(world, 5);
         const metals = baseMetals.slice(0, 5);
         if (!metals.length) {
-            return;
-        }
-
-        const influence = this.calculateMetalInfluence(metals);
-        if (influence <= 0) {
             return;
         }
 
@@ -1059,8 +1230,29 @@ class Player {
         dirX /= directionLength;
         dirY /= directionLength;
 
+        const influenceData = this.calculateMetalInfluence(metals, { x: dirX, y: dirY });
+        const influence = influenceData.total;
+        if (influence <= 0) {
+            return;
+        }
+
         const shiftMultiplier = shiftActive ? this.shiftAllomancyMultiplier : 1;
         const impulse = this.burstImpulse * influence * shiftMultiplier;
+
+        const burnDelta = Math.max(deltaTime ?? 0, 1 / 60);
+        const baseBurn = Math.max(this.burstBurnAmount, influence * this.burstBurnAmount * shiftMultiplier);
+        const steelShare = influence > 0 ? influenceData.steelContribution / influence : 0;
+        const ironShare = influence > 0 ? influenceData.ironContribution / influence : 0;
+        let resourcesOk = true;
+        if (steelShare > 0.001) {
+            resourcesOk = this.consumeSteel(burnDelta, baseBurn * steelShare) && resourcesOk;
+        }
+        if (ironShare > 0.001) {
+            resourcesOk = this.consumeIron(burnDelta, baseBurn * ironShare) && resourcesOk;
+        }
+        if (!resourcesOk) {
+            return;
+        }
 
         this.vx += dirX * impulse;
         this.vy += dirY * impulse;
@@ -1113,18 +1305,113 @@ class Player {
         return metals;
     }
 
-    calculateMetalInfluence(metals) {
-        let contribution = 0;
+    calculateMetalInfluence(metals, direction = null) {
+        if (!Array.isArray(metals) || !metals.length) {
+            return {
+                total: 0,
+                steelContribution: 0,
+                ironContribution: 0,
+                steelRatio: 0,
+                ironRatio: 0
+            };
+        }
+
+        const hasDirection = direction && Number.isFinite(direction.x) && Number.isFinite(direction.y);
+        let dirX = 0;
+        let dirY = 0;
+        if (hasDirection) {
+            const len = Math.hypot(direction.x, direction.y);
+            if (len > 0) {
+                dirX = direction.x / len;
+                dirY = direction.y / len;
+            }
+        }
+
+        let baseContribution = 0;
+        let steelContribution = 0;
+        let ironContribution = 0;
+
         for (const metal of metals) {
             const dx = metal.x - this.x;
             const dy = metal.y - this.y;
             const distance = Math.hypot(dx, dy);
+            if (!Number.isFinite(distance) || distance === 0) {
+                continue;
+            }
+
             const proximity = 1 - Math.min(distance / this.allomancyRange, 1);
-            contribution += Math.max(0, proximity);
+            if (proximity <= 0) {
+                continue;
+            }
+
+            baseContribution += proximity;
+
+            if (dirX || dirY) {
+                const alignment = (dirX * dx + dirY * dy) / distance;
+                const pullFactor = Math.max(0, alignment);
+                const pushFactor = Math.max(0, -alignment);
+
+                ironContribution += proximity * pullFactor;
+                steelContribution += proximity * pushFactor;
+            }
         }
 
-        return Math.min(1.5, contribution);
+        let totalContribution;
+        if (hasDirection) {
+            totalContribution = steelContribution + ironContribution;
+
+            if (totalContribution <= 0 && baseContribution > 0) {
+                totalContribution = baseContribution * 0.35;
+                steelContribution = totalContribution * 0.5;
+                ironContribution = totalContribution * 0.5;
+            }
+        } else {
+            totalContribution = baseContribution;
+            steelContribution = totalContribution * 0.5;
+            ironContribution = totalContribution * 0.5;
+        }
+
+        if (totalContribution <= 0) {
+            return {
+                total: 0,
+                steelContribution: 0,
+                ironContribution: 0,
+                steelRatio: 0,
+                ironRatio: 0
+            };
+        }
+
+        const unclampedTotal = totalContribution;
+        const clampedTotal = Math.min(1.5, unclampedTotal);
+        if (clampedTotal !== unclampedTotal) {
+            const scale = clampedTotal / unclampedTotal;
+            steelContribution *= scale;
+            ironContribution *= scale;
+            totalContribution = clampedTotal;
+        }
+
+        let steelRatio = 0;
+        let ironRatio = 0;
+        if (totalContribution > 0) {
+            steelRatio = clamp(steelContribution / totalContribution, 0, 1);
+            ironRatio = clamp(ironContribution / totalContribution, 0, 1);
+            const ratioTotal = steelRatio + ironRatio;
+            if (ratioTotal > 0) {
+                steelRatio /= ratioTotal;
+                ironRatio /= ratioTotal;
+            }
+        }
+
+        return {
+            total: totalContribution,
+            steelContribution,
+            ironContribution,
+            steelRatio,
+            ironRatio
+        };
     }
+
+
 
     canUseJumpForgiveness(world) {
         if (this.onGround || this.hasJumpedSinceGround) {
@@ -1420,7 +1707,7 @@ class Player {
         }
     }
     
-    handleAllomancy(mouse, controller, world, camera) {
+    handleAllomancy(deltaTime, mouse, controller, world, camera) {
         const worldMouseX = mouse.x + camera.x;
         const worldMouseY = mouse.y + camera.y;
 
@@ -1453,7 +1740,7 @@ class Player {
             ? (preferredTarget || closestMetal)
             : closestMetal;
 
-        if (steelInput) {
+        if (steelInput && this.hasSteelReserve()) {
             if (!this.steelTarget || this.steelTarget === null) {
                 this.steelTarget = steelTargetCandidate || null;
             } else if (controllerButtons.rightBumper && preferredTarget && this.steelTarget !== preferredTarget) {
@@ -1470,11 +1757,11 @@ class Player {
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 this.allomancyStrength = Math.max(0.1, 1 - (distance / this.allomancyRange));
             }
-        } else {
+        } else if (!steelInput || !this.hasSteelReserve()) {
             this.steelTarget = null;
         }
 
-        if (ironInput) {
+        if (ironInput && this.hasIronReserve()) {
             if (!this.ironTarget || this.ironTarget === null) {
                 this.ironTarget = ironTargetCandidate || null;
             } else if (controllerButtons.leftBumper && preferredTarget && this.ironTarget !== preferredTarget) {
@@ -1491,41 +1778,64 @@ class Player {
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 this.allomancyStrength = Math.max(0.1, 1 - (distance / this.allomancyRange));
             }
-        } else {
+        } else if (!ironInput || !this.hasIronReserve()) {
             this.ironTarget = null;
         }
 
-        this.applyAllomancy();
+        if (!this.steelTarget && !this.ironTarget) {
+            this.allomancyStrength = 0;
+        }
+
+        this.applyAllomancy(deltaTime);
     }
     
-    applyAllomancy() {
+    applyAllomancy(deltaTime) {
+        const integrationStep = Math.max(deltaTime ?? 0, 0);
+        if (integrationStep <= 0) {
+            return;
+        }
+
         const force = this.airAllomancyForce * 2 * this.allomancyStrength;
-        
+
         if (this.steelTarget) {
-            // Push away from metal source
-            const dx = this.x - this.steelTarget.x;
-            const dy = this.y - this.steelTarget.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance > 0) {
-                const fx = (dx / distance) * force;
-                const fy = (dy / distance) * force;
-                this.vx += fx * 0.016;
-                this.vy += fy * 0.016;
+            if (!this.hasSteelReserve()) {
+                this.steelTarget = null;
+            } else {
+                const dx = this.x - this.steelTarget.x;
+                const dy = this.y - this.steelTarget.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                const burnMultiplier = Math.max(0.3, this.allomancyStrength || 0.25);
+                const consumed = this.consumeSteel(integrationStep, burnMultiplier);
+                if (!consumed) {
+                    this.steelTarget = null;
+                } else if (distance > 0) {
+                    const fx = (dx / distance) * force;
+                    const fy = (dy / distance) * force;
+                    this.vx += fx * integrationStep;
+                    this.vy += fy * integrationStep;
+                }
             }
         }
-        
+
         if (this.ironTarget) {
-            // Pull towards metal source
-            const dx = this.ironTarget.x - this.x;
-            const dy = this.ironTarget.y - this.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance > 0) {
-                const fx = (dx / distance) * force;
-                const fy = (dy / distance) * force;
-                this.vx += fx * 0.016;
-                this.vy += fy * 0.016;
+            if (!this.hasIronReserve()) {
+                this.ironTarget = null;
+            } else {
+                const dx = this.ironTarget.x - this.x;
+                const dy = this.ironTarget.y - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                const burnMultiplier = Math.max(0.3, this.allomancyStrength || 0.25);
+                const consumed = this.consumeIron(integrationStep, burnMultiplier);
+                if (!consumed) {
+                    this.ironTarget = null;
+                } else if (distance > 0) {
+                    const fx = (dx / distance) * force;
+                    const fy = (dy / distance) * force;
+                    this.vx += fx * integrationStep;
+                    this.vy += fy * integrationStep;
+                }
             }
         }
     }
@@ -1595,6 +1905,32 @@ class Player {
         }
     }
     
+    checkVialPickups(world) {
+        if (!world || !Array.isArray(world.metalVials) || !world.metalVials.length) {
+            return;
+        }
+
+        const playerCenterX = this.x;
+        const playerCenterY = this.y - this.height * 0.5;
+        let collected = false;
+
+        world.metalVials = world.metalVials.filter(vial => {
+            const radius = vial.pickupRadius ?? 18;
+            const centerY = (vial.baseY ?? 0) - (vial.height ?? 18) * 0.6;
+            const dx = vial.x - playerCenterX;
+            const dy = centerY - playerCenterY;
+            if ((dx * dx + dy * dy) <= radius * radius) {
+                collected = true;
+                return false;
+            }
+            return true;
+        });
+
+        if (collected) {
+            this.refillMetals();
+        }
+    }
+
     checkPlatformCollision(platform) {
         return this.x + this.width / 2 > platform.x &&
                this.x - this.width / 2 < platform.x + platform.width &&
@@ -1856,6 +2192,7 @@ class World {
         this.buildings = [];
         this.streetLamps = [];
         this.groundMetals = [];
+        this.metalVials = [];
         this.trees = [];
         this.chunkBiomes = new Map();
         this.biomes = ['slums', 'noble_housing', 'town_square', 'marketplace', 'grand_keep'];
@@ -2036,6 +2373,7 @@ class World {
         this.buildings = [];
         this.streetLamps = [];
         this.groundMetals = [];
+        this.metalVials = [];
         this.trees = [];
         this.chunkBiomes.clear();
         this.generatedChunks.clear();
@@ -2132,6 +2470,15 @@ class World {
         return false;
     }
 
+    hasNearbyVial(x, radius = 70) {
+        for (const vial of this.metalVials) {
+            if (Math.abs(vial.x - x) <= radius) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     placeChunkStreetFeatures(startX, endX, biomeConfig, biome, buildings) {
         const groundY = this.getGroundY();
 
@@ -2172,6 +2519,8 @@ class World {
         if (biomeConfig.treeChance && biomeConfig.treeChance > 0 && biomeConfig.treeCountRange) {
             this.placeTreesInOpenSpaces(startX, endX, biomeConfig, buildings, biome);
         }
+
+        this.placeMetalVials(startX, endX, biomeConfig, biome, buildings);
     }
 
     placeTreesInOpenSpaces(startX, endX, biomeConfig, buildings, biome) {
@@ -2216,6 +2565,213 @@ class World {
                 const x = gap.start + margin + Math.random() * Math.max(1, gapWidth - margin * 2);
                 this.createTree(x, groundY, biome);
             }
+        }
+    }
+
+    placeMetalVials(startX, endX, biomeConfig, biome, buildings) {
+        const spawnChance = biomeConfig.metalVialChance ?? 0;
+        if (spawnChance <= 0) {
+            return;
+        }
+
+        const countRange = biomeConfig.metalVialCountRange || [0, 2];
+        const desiredTotal = Math.max(0, randomIntInRange(countRange, 0));
+        if (desiredTotal <= 0) {
+            return;
+        }
+
+        const buildingPlatforms = this.platforms.filter(platform =>
+            platform?.type === 'building' &&
+            platform.x < endX &&
+            platform.x + platform.width > startX
+        );
+
+        const rooftopPlatforms = this.platforms.filter(platform =>
+            platform?.type === 'rooftop' &&
+            platform.x < endX &&
+            platform.x + platform.width > startX
+        );
+
+        const groundY = this.getGroundY();
+        const rooftopsAvailable = rooftopPlatforms.length > 0;
+        const rooftopTarget = rooftopsAvailable
+            ? desiredTotal
+            : (buildingPlatforms.length
+                ? Math.min(desiredTotal, Math.max(1, Math.round(desiredTotal / 2)))
+                : 0);
+
+        const tryPlaceGround = () => {
+            const margin = 28;
+            if ((endX - margin) <= (startX + margin)) {
+                return false;
+            }
+
+            const candidateX = randomInRange([startX + margin, endX - margin], startX + this.chunkSize / 2);
+            const overlapsBuilding = this.positionOverlapsBuilding(candidateX, buildings, 16);
+            if (overlapsBuilding || this.hasNearbyGroundMetal(candidateX, 45) || this.hasNearbyVial(candidateX, 90)) {
+                return false;
+            }
+
+            if (Math.random() > spawnChance) {
+                return false;
+            }
+
+            this.createMetalVial(candidateX, groundY, biome);
+            return true;
+        };
+
+        const tryPlaceRooftop = () => {
+            const candidatePlatforms = rooftopsAvailable ? rooftopPlatforms : buildingPlatforms;
+            if (!candidatePlatforms.length) {
+                return false;
+            }
+
+            const platform = candidatePlatforms[Math.floor(Math.random() * candidatePlatforms.length)];
+            if (!platform) {
+                return false;
+            }
+
+            const margin = rooftopsAvailable ? 12 : 18;
+            const minX = platform.x + margin;
+            const maxX = platform.x + platform.width - margin;
+            if (minX >= maxX) {
+                return false;
+            }
+
+            const candidateX = minX + Math.random() * (maxX - minX);
+            if (this.hasNearbyVial(candidateX, 80)) {
+                return false;
+            }
+
+            if (Math.random() > spawnChance) {
+                return false;
+            }
+
+            const roofSurfaceY = platform.y;
+            this.createMetalVial(candidateX, roofSurfaceY, biome);
+            return true;
+        };
+
+        const attemptPlacement = (target, fn) => {
+            if (target <= 0) {
+                return 0;
+            }
+            let placed = 0;
+            let tries = 0;
+            const limit = Math.max(target * 8, 16);
+            while (placed < target && tries < limit) {
+                if (fn()) {
+                    placed++;
+                }
+                tries++;
+            }
+            return placed;
+        };
+
+        const rooftopPlaced = attemptPlacement(rooftopTarget, tryPlaceRooftop);
+        const remaining = Math.max(0, desiredTotal - rooftopPlaced);
+        attemptPlacement(remaining, tryPlaceGround);
+    }
+
+    createMetalVial(x, groundY, biome) {
+        const bodyHeight = 18;
+        const neckHeight = 6;
+        const capHeight = 4;
+        const width = 14;
+        const baseOffset = 2;
+
+        const vial = {
+            x,
+            biome,
+            baseY: groundY - baseOffset,
+            width,
+            bodyHeight,
+            neckHeight,
+            capHeight,
+            height: bodyHeight + neckHeight + capHeight,
+            bobSeed: Math.random() * Math.PI * 2,
+            pickupRadius: Math.max(width * 1.4, 14)
+        };
+
+        this.metalVials.push(vial);
+        return vial;
+    }
+
+    renderMetalVials(ctx, player) {
+        if (!this.metalVials.length) {
+            return;
+        }
+
+        const now = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+            ? performance.now()
+            : Date.now();
+
+        for (const vial of this.metalVials) {
+            const totalHeight = vial.height ?? (vial.bodyHeight + vial.neckHeight + vial.capHeight);
+            const width = vial.width ?? 14;
+            const halfWidth = width / 2;
+            const bob = Math.sin(now / 600 + (vial.bobSeed || 0)) * 2.2;
+            const baseY = (vial.baseY ?? 0) + bob;
+            const bodyHeight = vial.bodyHeight ?? 18;
+            const neckHeight = vial.neckHeight ?? 6;
+            const capHeight = vial.capHeight ?? 4;
+            const playerInfluence = (() => {
+                if (!player) {
+                    return 0;
+                }
+                const playerCenterX = player.x;
+                const playerCenterY = player.y - player.height * 0.5;
+                const dx = playerCenterX - vial.x;
+                const dy = playerCenterY - (baseY - totalHeight * 0.6);
+                const distance = Math.hypot(dx, dy);
+                const proximity = distance < 140 ? 1 - Math.min(distance / 140, 1) : 0;
+                const reserveFactor = 1 - Math.min(((player.getSteelRatio?.() ?? 1) + (player.getIronRatio?.() ?? 1)) * 0.5, 1);
+                return Math.min(1, proximity * 0.85 + reserveFactor * 0.55);
+            })();
+
+            ctx.save();
+            ctx.translate(vial.x, baseY);
+
+            // Vial Glass
+            const glassColor = `rgba(220, 230, 255, ${playerInfluence * 0.2})`;
+            ctx.fillStyle = glassColor;
+            ctx.beginPath();
+            ctx.moveTo(-halfWidth * 1.15, -neckHeight);
+            ctx.lineTo(-halfWidth * 1.4, -totalHeight + capHeight);
+            ctx.lineTo(halfWidth * 1.4, -totalHeight + capHeight);
+            ctx.lineTo(halfWidth * 1.15, -neckHeight);
+            ctx.closePath();
+            ctx.fill();
+
+            // Vial Walls
+            ctx.strokeStyle = `rgba(210, 220, 255, ${0.4 + playerInfluence * 0.35})`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-halfWidth * 1.15, -neckHeight);
+            ctx.lineTo(-halfWidth * 1.4, -totalHeight + capHeight);
+            ctx.lineTo(halfWidth * 1.4, -totalHeight + capHeight);
+            ctx.lineTo(halfWidth * 1.15, -neckHeight);
+            ctx.closePath();
+            ctx.stroke();
+
+            // Floating Metals
+            const prox_modifier = 0.35 + playerInfluence * 0.2
+            ctx.fillStyle = `rgba(${ALLOMANCY_PULL_COLOR[0]}, ${ALLOMANCY_PULL_COLOR[1]}, ${ALLOMANCY_PULL_COLOR[2]}, ${prox_modifier})`;
+            ctx.fillRect(-halfWidth * 0.6 - 2, -bodyHeight - 3, width * 0.6, neckHeight * 1.2);
+            ctx.fillStyle = `rgba(${ALLOMANCY_PUSH_COLOR[0]}, ${ALLOMANCY_PUSH_COLOR[1]}, ${ALLOMANCY_PUSH_COLOR[2]}, ${prox_modifier})`;
+            ctx.fillRect(-halfWidth * 0.6 + 2, -bodyHeight + 3, width * 0.6, neckHeight * 1.2);
+
+            // Cork
+            ctx.fillStyle = 'rgba(110, 94, 76, 1)'
+            ctx.fillRect(-halfWidth * 0.62, -totalHeight - 1, width * 0.62, capHeight + 1);
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+            ctx.beginPath();
+            ctx.ellipse(0, 3, width * 0.9, width * 0.35, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
         }
     }
 
@@ -2624,6 +3180,7 @@ class World {
         }
         
         this.renderStreetLamps(ctx, player);
+        this.renderMetalVials(ctx, player);
 
         // Render metal sources
         for (const metal of this.metalSources) {
