@@ -802,8 +802,8 @@ class Player {
         this.y = y;
         this.vx = 0;
         this.vy = 0;
-        this.width = 16;
-        this.height = 24;
+        this.width = 20;
+        this.height = 32;
         this.onGround = false;
         this.facing = 1; // 1 for right, -1 for left
 
@@ -826,7 +826,7 @@ class Player {
         this.airAllomancyForce = 750;
         this.shiftAllomancyMultiplier = 1.4;
         this.burstImpulse = 900;
-        this.burstCooldownDuration = 1.5;
+        this.burstCooldownDuration = 2;
         this.burstCooldownRemaining = 0;
         this.previousSpaceDown = false;
         this.activeAirMetals = [];
@@ -1681,10 +1681,23 @@ class Player {
 
         this.renderAllomancyArrows(ctx);
 
+        // Launch Cooldown Aura
+        const cooldownRatio = this.burstCooldownDuration > 0 ? this.burstCooldownRemaining / this.burstCooldownDuration : 0;
+        const auraStrength = 1 - Math.max(0, Math.min(1, cooldownRatio));
+        if (auraStrength < 1) {
+            const auraGradient = ctx.createRadialGradient(this.x, this.y, 8, this.x, this.y, 24);
+            auraGradient.addColorStop(0, `rgba(120, 160, 255, ${0.2 * auraStrength})`);
+            auraGradient.addColorStop(1, 'rgba(120, 160, 255, 0)');
+            ctx.fillStyle = auraGradient;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 24, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
         // Mistcloak tassels
         ctx.lineCap = 'round';
-        ctx.strokeStyle = 'rgba(83, 92, 119, 0.85)';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(83, 99, 134, 0.85)';
+        ctx.lineWidth = 1.6;
         for (const tassel of this.tassels) {
             if (!tassel.points.length) continue;
             const base = tassel.base || { x: this.x - this.facing*5, y: this.y };
@@ -1693,43 +1706,61 @@ class Player {
             tassel.points.forEach(point => ctx.lineTo(point.x, point.y));
             ctx.stroke();
         }
-        ctx.lineCap = 'butt';
 
         // Draw player (Vin)
         const torsoX = this.x - this.width / 2;
         const torsoY = this.y - this.height / 2;
-        const speed = Math.min(Math.hypot(this.vx, this.vy), 320);
 
+        // Body
         ctx.fillStyle = '#3b3c46';
-        ctx.fillRect(torsoX, torsoY + 6, this.width, this.height - 8);
+        ctx.fillRect(torsoX + this.width * 0.15, torsoY + this.height * 0.22, this.width - this.width * 0.3, this.height * 0.4);
+
+        // Legs
         ctx.beginPath();
-        ctx.ellipse(this.x, torsoY + 6, this.width * 0.55, this.height * 0.35, 0, Math.PI, 0, true);
-        ctx.fillStyle = '#2a2b34';
+        ctx.moveTo(torsoX + this.width * 0.15, torsoY + this.height * 0.60);
+        ctx.lineTo(torsoX + this.width * 0.35, torsoY + this.height);
+        ctx.lineTo(torsoX + this.width * 0.65, torsoY + this.height);
+        ctx.lineTo(torsoX + this.width * 0.85, torsoY + this.height * 0.60);
+        ctx.closePath();
         ctx.fill();
-        ctx.fillRect(torsoX + this.width * 0.32, torsoY + 2, this.width * 0.36, this.height * 0.22);
+
+        // Head params
+        const headWidth = this.width/3
+        const headHeight = this.height/4
+        const headX = this.x - headWidth/2 + (this.facing * 3);
+
+        // Hood
+        ctx.fillStyle = '#2a2b34';
+        ctx.beginPath();
+        ctx.ellipse(this.x, torsoY + 7, this.width * 0.48, this.height * 0.32, 0, Math.PI, 0, true);
+        ctx.roundRect(this.x - headWidth/2, this.y - this.height/2 - 1, headWidth+1, headHeight+1, 3);
+        ctx.fill();
         
-        // Draw face direction indicator
-        ctx.fillStyle = 'rgba(153, 144, 123, 1)';
-        const faceX = this.x - 3 + (this.facing * 4);
-        ctx.fillRect(faceX, this.y - 10, 6, 8);
+        // Launch Charged Outline
+        if (auraStrength == 1) {
+            ctx.strokeStyle = 'rgba(61, 85, 136, 0.65)';
+        } else {
+            ctx.strokeStyle = 'rgba(38, 54, 87, 0.71)';
+        }
+        ctx.beginPath();
+        ctx.moveTo(torsoX + this.width * 0.15, torsoY + this.height * 0.45);
+        ctx.lineTo(torsoX + this.width * 0.15, torsoY + this.height * 0.60);
+        ctx.lineTo(torsoX + this.width * 0.35, torsoY + this.height);
+        ctx.lineTo(torsoX + this.width * 0.65, torsoY + this.height);
+        ctx.lineTo(torsoX + this.width * 0.85, torsoY + this.height * 0.60);
+        ctx.lineTo(torsoX + this.width * 0.85, torsoY + this.height * 0.45);
+        ctx.moveTo(this.x, torsoY + 7, this.width * 0.48);
+        ctx.ellipse(this.x, torsoY + 7, this.width * 0.48, this.height * 0.32, 0, Math.PI, 0, true);
+        ctx.lineTo(this.x, torsoY + 7, this.width * 0.48)
+        ctx.roundRect(this.x - headWidth/2, this.y - this.height/2 - 1, headWidth+1, headHeight+1, 3);
+        ctx.stroke()
 
-        const barWidth = 28;
-        const barHeight = 4;
-        const barX = this.x - barWidth / 2;
-        const barY = this.y - this.height / 2 - 12;
-        const cooldownRatio = this.burstCooldownDuration > 0 ? this.burstCooldownRemaining / this.burstCooldownDuration : 0;
+        // Face
+        ctx.fillStyle = 'rgba(138, 131, 114, 1)';
+        ctx.beginPath();
+        ctx.roundRect(headX, this.y - this.height/2, headWidth, headHeight, 2);
+        ctx.fill();
 
-        ctx.fillStyle = 'rgba(30, 30, 40, 0.7)';
-        ctx.fillRect(barX, barY, barWidth, barHeight);
-
-        const readyProgress = Math.max(0, Math.min(1, 1 - cooldownRatio));
-        ctx.fillStyle = cooldownRatio > 0 ? '#6f9dff' : '#9ce0ff';
-        ctx.fillRect(barX, barY, barWidth * readyProgress, barHeight);
-
-        ctx.strokeStyle = 'rgba(10, 10, 15, 0.9)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(barX, barY, barWidth, barHeight);
-        
         ctx.restore();
     }
 }
