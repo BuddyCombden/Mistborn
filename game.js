@@ -1,4 +1,4 @@
-// Mistborn: Evening Stroll - Game Engine
+// Mistborn: Allomancy Sandbox
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -26,8 +26,8 @@ class Game {
         this.fixedTimeStep = 1 / this.targetFPS; // Fixed timestep for consistent physics
         
         // Game objects
-        this.player = new Player(400, 300);
-        this.world = new World();
+        this.world  = new World();
+        this.player = new Player(this.world.chunkSize/2, 300);
         this.camera = new Camera(this.canvas.width, this.canvas.height);
         
         // Input state
@@ -483,11 +483,15 @@ class Game {
     }
 }
 
-const ALLOMANCY_PUSH_COLOR = [94, 188, 255];
-const ALLOMANCY_PULL_COLOR = [255, 94, 94];
+const ALLOMANCY_PUSH_COLORtemp = '#24c0f0';
+const ALLOMANCY_PULL_COLORtemp = '#ce2071';
+const ALLOMANCY_AIM_COLORtemp  = '#c4d9ff';
+const ALLOMANCY_PUSH_COLOR = [36, 192, 240];
+const ALLOMANCY_PULL_COLOR = [206, 32, 113];
+const ALLOMANCY_AIM_COLOR  = [196, 217, 255];
 const ALLOMANCY_STRENGTH_PROFILES = {
     normal: { dashLength: 5, baseAlpha: 0.65 },
-    shift: { dashLength: 10, baseAlpha: 0.8 },
+    shift:  { dashLength: 10, baseAlpha: 0.8 },
     launch: { dashLength: 15, baseAlpha: 0.9 }
 };
 const ALLOMANCY_GAP_MIN = 3;
@@ -1142,6 +1146,80 @@ class Player {
         return false;
     }
 
+    renderAllomancyArrows(ctx) {
+        if (this.ironTarget) {
+            this.drawAimArrow(
+                ctx, this.getAllomancyTargetDirection(this.ironTarget), 24, 
+                ALLOMANCY_PULL_COLOR, 1, 0.4
+            );
+        } 
+        if (this.steelTarget) {
+            this.drawAimArrow(
+                ctx, this.getAllomancyTargetDirection(this.steelTarget), 24,
+                ALLOMANCY_PUSH_COLOR, 1, 0.4
+            );
+        } 
+        if ((!this.ironTarget || !this.steelTarget) && this.targetedMetal) {
+            this.drawAimArrow(
+                ctx, this.getAllomancyTargetDirection(this.targetedMetal), 24,
+                ALLOMANCY_AIM_COLOR, 0.8, 0.2
+            );
+        }
+
+        if (this.airAllomancyDirection) {
+            const len = Math.hypot(this.airAllomancyDirection.x, this.airAllomancyDirection.y);
+            if (len > 0.05) {
+                const dir = {
+                    x: this.airAllomancyDirection.x / len,
+                    y: this.airAllomancyDirection.y / len
+                };
+                this.drawAimArrow(ctx, dir, 32, ALLOMANCY_AIM_COLOR, 1.1);
+            }
+        }
+    }
+
+    drawAimArrow(ctx, direction, orbitRadius, color, scale = 1, opacity = 0.35) {
+        const centerX = this.x;
+        const centerY = this.y;
+        const angle = Math.atan2(direction.y, direction.x);
+
+        const offsetX = direction.x * orbitRadius;
+        const offsetY = direction.y * orbitRadius;
+
+        ctx.save();
+        ctx.translate(centerX + offsetX, centerY + offsetY);
+        ctx.rotate(angle);
+
+        const farPoint = 15 * scale;
+        const midPoint = 8 * scale;
+        const lowPoint = 4 * scale;
+        const halfWidth = 5 * scale;
+
+        ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${opacity})`;
+        ctx.beginPath();
+        ctx.moveTo(midPoint, -halfWidth);
+        ctx.quadraticCurveTo(farPoint, 0, midPoint, halfWidth);
+        ctx.quadraticCurveTo(lowPoint, midPoint*1.2, lowPoint, halfWidth);
+        ctx.quadraticCurveTo(midPoint, 0, lowPoint, -halfWidth);
+        ctx.quadraticCurveTo(lowPoint, -midPoint*1.2, midPoint, -halfWidth);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    getAllomancyTargetDirection(target) {
+
+        const dx = target.x - this.x;
+        const dy = target.y - this.y;
+        const len = Math.hypot(dx, dy);
+        if (len === 0) {
+            return null;
+        }
+
+        return {x: dx / len, y: dy / len};
+    }
+
     updateTassels(deltaTime) {
         const baseShoulderY = this.y - this.height / 2 + 8;
         const speed = Math.hypot(this.vx, this.vy);
@@ -1517,7 +1595,7 @@ class Player {
             const distanceRatio = distance / this.allomancyRange;
             const strengthLevel = this.targeterStrengthLevel === 'none' ? 'normal' : this.targeterStrengthLevel;
             const strengthValue = this.targeterStrengthValue || 1;
-            const { strokeStyle, dash } = computeAllomancyLineParams(strengthLevel, distanceRatio, [255, 255, 255], strengthValue, 0.85);
+            const { strokeStyle, dash } = computeAllomancyLineParams(strengthLevel, distanceRatio, ALLOMANCY_AIM_COLOR, strengthValue, 0.85);
             ctx.strokeStyle = strokeStyle;
             ctx.lineWidth = strengthLevel === 'launch' ? 2 : 1.5;
             ctx.setLineDash(dash);
@@ -1600,6 +1678,8 @@ class Player {
             }
             ctx.setLineDash([]);
         }
+
+        this.renderAllomancyArrows(ctx);
 
         // Mistcloak tassels
         ctx.lineCap = 'round';
@@ -2616,12 +2696,12 @@ class World {
             ctx.fillStyle = '#2b2b33';
             ctx.fillRect(baseX, poleTopY, poleWidth, poleHeight);
 
-            const glowGradient = ctx.createRadialGradient(lamp.x, headY, 2, lamp.x, headY, 48);
-            glowGradient.addColorStop(0, 'rgba(255, 254, 240, 0.1)');
-            glowGradient.addColorStop(1, 'rgba(255, 254, 240, 0)');
+            const glowGradient = ctx.createRadialGradient(lamp.x, headY, 0, lamp.x, headY, 64);
+            glowGradient.addColorStop(0, 'rgba(240, 236, 184, 0.2)');
+            glowGradient.addColorStop(1, 'rgba(241, 233, 216, 0)');
             ctx.fillStyle = glowGradient;
             ctx.beginPath();
-            ctx.arc(lamp.x, headY, 28, 0, Math.PI * 2);
+            ctx.arc(lamp.x, headY, 62, 0, Math.PI * 2);
             ctx.fill();
         }
         ctx.restore();
