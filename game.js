@@ -847,6 +847,7 @@ class Player {
             { offsetY: 4, lengths: [10, 8], points: [], base: { x: this.x, y: this.y } }
         ];
         this.airAllomancyDirection = null;
+        this.tiltAngle = 0;
     }
     
     update(deltaTime, keys, mouse, controller, world, camera) {
@@ -871,6 +872,8 @@ class Player {
         
         // Check collisions with world
         this.checkCollisions(world);
+
+        this.updateTilt(deltaTime, world);
     }
 
     updateCooldowns(deltaTime) {
@@ -899,12 +902,33 @@ class Player {
             rush.age += deltaTime;
             const progress = rush.age / rush.duration;
             const decay = 1 - Math.min(progress, 1);
-                rush.x += rush.dirX * rush.speed * deltaTime;
-                rush.y += rush.dirY * rush.speed * 0.35 * deltaTime;
+            rush.x += rush.dirX * rush.speed * deltaTime;
+            rush.y += rush.dirY * rush.speed * 0.35 * deltaTime;
             rush.currentWidth = rush.baseWidth * (0.5 + decay * 0.5);
             rush.currentLength = rush.baseLength * (0.7 + decay * 0.6);
             return rush.age < rush.duration;
         });
+    }
+
+    updateTilt(deltaTime, world) {
+        const speed = Math.hypot(this.vx, this.vy);
+        let target = 0;
+
+        if (this.onGround) {
+            const run = this.maxSpeedX > 0 ? clamp(this.vx / this.maxSpeedX, -1, 1) : 0;
+            target = run * 0.28;
+        } else if (speed > 1) {
+            const normX = this.vx / speed;
+            target = clamp((normX * 0.3), -0.55, 0.55);
+        }
+
+        if (!this.onGround && this.vy > 40 && world?.isNearSurface(this, 70)) {
+            target *= -1
+        }
+
+        target = clamp(target, -0.6, 0.6);
+        const lerp = Math.min(1, deltaTime * 10);
+        this.tiltAngle += (target - this.tiltAngle) * lerp;
     }
     
     handleMovement(deltaTime, keys, controller, world) {
@@ -1103,8 +1127,7 @@ class Player {
             const dy = metal.y - this.y;
             const distance = Math.hypot(dx, dy);
             const proximity = 1 - Math.min(distance / this.allomancyRange, 1);
-            const sizeFactor = (metal.size || 10) / 10;
-            contribution += Math.max(0, proximity) * sizeFactor;
+            contribution += Math.max(0, proximity);
         }
 
         return Math.min(1.5, contribution);
@@ -1681,12 +1704,16 @@ class Player {
 
         this.renderAllomancyArrows(ctx);
 
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.tiltAngle);
+        ctx.translate(-this.x, -this.y);
+
         // Launch Cooldown Aura
         const cooldownRatio = this.burstCooldownDuration > 0 ? this.burstCooldownRemaining / this.burstCooldownDuration : 0;
         const auraStrength = 1 - Math.max(0, Math.min(1, cooldownRatio));
         if (auraStrength < 1) {
             const auraGradient = ctx.createRadialGradient(this.x, this.y, 8, this.x, this.y, 24);
-            auraGradient.addColorStop(0, `rgba(120, 160, 255, ${0.2 * auraStrength})`);
+            auraGradient.addColorStop(0, `rgba(120, 160, 255, ${0.22 * auraStrength})`);
             auraGradient.addColorStop(1, 'rgba(120, 160, 255, 0)');
             ctx.fillStyle = auraGradient;
             ctx.beginPath();
@@ -1737,7 +1764,7 @@ class Player {
         ctx.fill();
         
         // Launch Charged Outline
-        if (auraStrength == 1) {
+        if (auraStrength >= 0.999 && this.burstCooldownRemaining <= 0) {
             ctx.strokeStyle = 'rgba(61, 85, 136, 0.65)';
         } else {
             ctx.strokeStyle = 'rgba(38, 54, 87, 0.71)';
