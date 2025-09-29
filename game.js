@@ -27,7 +27,8 @@ class Game {
         
         // Game objects
         this.world  = new World();
-        this.player = new Player(this.world.chunkSize/2, 300);
+        const spawn = this.world.getSpawnPoint();
+        this.player = new Player(spawn.x, spawn.y);
         this.camera = new Camera(this.canvas.width, this.canvas.height);
         
         // Input state
@@ -239,7 +240,8 @@ class Game {
     
     restart() {
         this.world = new World();
-        this.player = new Player(400, 300);
+        const spawn = this.world.getSpawnPoint();
+        this.player = new Player(spawn.x, spawn.y);
         this.camera.x = 0;
         this.camera.y = 0;
         this.gameState = 'playing';
@@ -911,18 +913,9 @@ class Player {
     }
 
     updateTilt(deltaTime, world) {
-        const speed = Math.hypot(this.vx, this.vy);
-        let target = 0;
+        let target = this.vx / this.maxSpeedX * 0.2;
 
-        if (this.onGround) {
-            const run = this.maxSpeedX > 0 ? clamp(this.vx / this.maxSpeedX, -1, 1) : 0;
-            target = run * 0.28;
-        } else if (speed > 1) {
-            const normX = this.vx / speed;
-            target = clamp((normX * 0.3), -0.55, 0.55);
-        }
-
-        if (!this.onGround && this.vy > 40 && world?.isNearSurface(this, 70)) {
+        if (!this.onGround && this.vy > 300 && world?.isNearSurface(this, 70)) {
             target *= -1
         }
 
@@ -2020,16 +2013,22 @@ class World {
         this.generatedChunks.clear();
         
         // Generate initial chunks around spawn
-        this.generateChunkRange(-3, 3);
+        this.generateChunk(-3, "slums")
+        this.generateChunk(-2, "marketplace")
+        this.generateChunk(-1, "noble_housing")
+        this.generateChunk(0, "grand_keep")
+        this.generateChunk(1, "slums")
+        this.generateChunk(2, "slums")
+        this.generateChunk(3, "town_square")
     }
     
-    generateChunkRange(startChunk, endChunk) {
+    generateChunkRange(startChunk, endChunk, forced_biome = null) {
         for (let chunkX = startChunk; chunkX <= endChunk; chunkX++) {
-            this.generateChunk(chunkX);
+            this.generateChunk(chunkX, forced_biome);
         }
     }
     
-    generateChunk(chunkX) {
+    generateChunk(chunkX, force_biome = null) {
         const chunkKey = chunkX;
         
         // Skip if already generated
@@ -2040,7 +2039,7 @@ class World {
         this.generatedChunks.add(chunkKey);
         
         // Select a single biome for this entire chunk
-        const biome = this.biomes[Math.floor(Math.random() * this.biomes.length)];
+        const biome = force_biome || this.biomes[Math.floor(Math.random() * this.biomes.length)];
         const biomeConfig = BIOME_CONFIGS[biome] || BIOME_CONFIGS.default;
         this.chunkBiomes.set(chunkX, biome);
         
@@ -2273,7 +2272,7 @@ class World {
     }
     
     cleanupDistantChunks(playerChunk) {
-        const cleanupDistance = this.renderDistance + 2;
+        const cleanupDistance = this.renderDistance + 10;
         const minKeepChunk = playerChunk - cleanupDistance;
         const maxKeepChunk = playerChunk + cleanupDistance;
         
@@ -2321,7 +2320,42 @@ class World {
             this.chunkBiomes.delete(chunk);
         });
     }
-    
+
+    getSpawnPoint() {
+        const defaultX = this.chunkSize * 0.5;
+        const defaultY = this.getGroundY() - 12;
+
+        let bestPlatform = null;
+        let bestDistance = Infinity;
+        const targetCenter = this.chunkSize * 0.5;
+
+        for (const platform of this.platforms) {
+            if (platform.type !== 'rooftop') continue;
+
+            const centerX = platform.x + platform.width / 2;
+            const chunk = Math.floor(centerX / this.chunkSize);
+            const intersectsChunkZero = (platform.x < this.chunkSize) && (platform.x + platform.width > 0);
+
+            if (chunk !== 0 && !intersectsChunkZero) {
+                continue;
+            }
+
+            const distance = Math.abs(centerX - targetCenter);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestPlatform = platform;
+            }
+        }
+
+        if (!bestPlatform) {
+            return { x: defaultX, y: defaultY };
+        }
+
+        const spawnX = bestPlatform.x + bestPlatform.width / 2;
+        const spawnY = (bestPlatform.y ?? this.getGroundY()) - 12;
+        return { x: spawnX, y: spawnY };
+    }
+
     getGroundY() {
         return 600; // Fixed ground level
     }
@@ -2340,7 +2374,7 @@ class World {
         return this.chunkBiomes.get(chunk) || 'unknown';
     }
 
-    isNearSurface(player, tolerance = 6) {
+    isNearSurface(player, tolerance = 6, consider_angle = false) {
         const tol = Math.max(0, tolerance);
         const bottom = player.y + player.height / 2;
         const groundY = this.getGroundY();
