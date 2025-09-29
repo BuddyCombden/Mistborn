@@ -39,7 +39,7 @@
             z-index: 100;
         }
         
-        #instructions {
+        #controlUI {
             position: absolute;
             top: 20px;
             right: 20px;
@@ -76,18 +76,33 @@
             <div id="debugInfo"></div>
         </div>
         
-        <div id="instructions">
-            <div style="text-decoration: underline; font-weight: 600;">Basic Controls:</div>
-            <div>A/D - Move left/right | Space - Jump</div>
-            <div>Tab - Pause | R - Restart | I - Debug Info</div>
-            <div style="text-decoration: underline; font-weight: 600;">Allomancy:</div>
-            <div>L-Click - Steel Push | R-Click - Iron Pull</div>
-            <div>WASD - Allomantic Movement | Shift - Increase Power</div>
-            <div>Space (in air) - Duralumin Launch</div>
+        <div id="controlUI">
+            <div id="keyboard">
+                <div style="text-decoration: underline; font-weight: 600;">Basic Controls:</div>
+                <div>A/D - Move left/right | Space - Jump</div>
+                <div>Tab - Pause | R - Restart | I - Debug Info</div>
+                <div style="margin-top:8px; text-decoration: underline; font-weight: 600;">Allomancy:</div>
+                <div>WASD - Automatic Allomantic Movement</div>
+                <div>Shift - Increase Power</div>
+                <div>Space (in air) - Duralumin Launch</div>
+                <div>Mouse - Aim Manual Allomancy</div>
+                <div>L/R-Click - Manual Push/Pull</div>
+            </div>
+            <div id="controller" style="display: none">
+                <div style="text-decoration: underline; font-weight: 600;">Basic Controls:</div>
+                <div>L-Stick - Move left/right | A - Jump</div>
+                <div>Start - Pause | Back - Debug Info</div>
+                <div style="margin-top:8px; text-decoration: underline; font-weight: 600;">Allomancy:</div>
+                <div>L-Stick - Automatic Allomantic Movement</div>
+                <div>LT - Increase Power</div>
+                <div>A (in air) - Duralumin Launch</div>
+                <div>R-Stick - Aim Manual Allomancy</div>
+                <div>R/L-Bumper - Manual Push/Pull</div>
+            </div>
         </div>
         
         <div id="pauseScreen">
-            <div>PAUSED<br><small>Press Tab to resume</small></div>
+            <div>PAUSED<br><small>Press Tab/Start to resume</small></div>
         </div>
     </div>
 

@@ -4,8 +4,13 @@ class Game {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
         this.pauseScreen = document.getElementById('pauseScreen');
-        this.debugInfo = document.getElementById('debugInfo');
-        this.debugUI = document.getElementById('debugUI');
+        this.debugInfo   = document.getElementById('debugInfo');
+        this.debugUI     = document.getElementById('debugUI');
+        this.controlUI   = {
+            root: document.getElementById('controlUI'),
+            keyboard: document.querySelector('#controlUI #keyboard'),
+            controller: document.querySelector('#controlUI #controller')
+        };
         
         this.setupCanvas();
         this.setupInput();
@@ -35,15 +40,17 @@ class Game {
             buttons: {
                 a: false,
                 start: false,
+                back: false,
                 leftTrigger: false,
                 leftTriggerValue: 0,
                 leftBumper: false,
                 rightBumper: false
             }
         };
-        this.previousControllerButtons = { start: false, leftBumper: false, rightBumper: false };
+        this.previousControllerButtons = { start: false, back: false, leftBumper: false, rightBumper: false };
         this.controllerDeadZone = 0.25;
-        this.debugUIVisible = this.debugUI.style.display == 'none' ? false : true;
+        this.debugUIVisible = this.debugUI?.style.display === 'none' ? false : true;
+        this.updateControlScheme(this.controller.connected ? 'controller' : 'keyboard');
 
         this.start();
     }
@@ -74,6 +81,7 @@ class Game {
             if (e.code === 'KeyI') {
                 this.toggleDebugUI();
             }
+            this.updateControlScheme('keyboard');
         });
         
         document.addEventListener('keyup', (e) => {
@@ -119,11 +127,13 @@ class Game {
         this.controller.rightStick.y = 0;
         this.controller.buttons.a = false;
         this.controller.buttons.start = false;
+        this.controller.buttons.back = false;
         this.controller.buttons.leftTrigger = false;
         this.controller.buttons.leftTriggerValue = 0;
         this.controller.buttons.leftBumper = false;
         this.controller.buttons.rightBumper = false;
         this.previousControllerButtons.start = false;
+        this.previousControllerButtons.back = false;
         this.previousControllerButtons.leftBumper = false;
         this.previousControllerButtons.rightBumper = false;
     }
@@ -132,6 +142,20 @@ class Game {
         if (!this.debugUI) return;
         this.debugUIVisible = !this.debugUIVisible;
         this.debugUI.style.display = this.debugUIVisible ? 'block' : 'none';
+    }
+
+    updateControlScheme(activeScheme) {
+        if (!this.controlUI.keyboard || !this.controlUI.controller) {
+            return;
+        }
+
+        if (activeScheme === 'controller') {
+            this.controlUI.keyboard.style.display = 'none';
+            this.controlUI.controller.style.display = 'block';
+        } else {
+            this.controlUI.keyboard.style.display = 'block';
+            this.controlUI.controller.style.display = 'none';
+        }
     }
 
     applyDeadZone(value, deadZone = this.controllerDeadZone) {
@@ -166,6 +190,7 @@ class Game {
         }
 
         this.controller.connected = true;
+        this.updateControlScheme('controller');
 
         const leftX = this.applyDeadZone(activePad.axes[0] ?? 0);
         const leftY = this.applyDeadZone(activePad.axes[1] ?? 0);
@@ -179,6 +204,7 @@ class Game {
 
         const aPressed = Boolean(activePad.buttons[0]?.pressed);
         const startPressed = Boolean(activePad.buttons[9]?.pressed);
+        const backPressed = Boolean(activePad.buttons[8]?.pressed);
         const leftTriggerValue = activePad.buttons[6]?.value ?? 0;
         const leftTriggerPressed = Boolean(activePad.buttons[6]?.pressed) || leftTriggerValue > 0.4;
         const leftBumperPressed = Boolean(activePad.buttons[4]?.pressed);
@@ -186,6 +212,7 @@ class Game {
 
         this.controller.buttons.a = aPressed;
         this.controller.buttons.start = startPressed;
+        this.controller.buttons.back = backPressed;
         this.controller.buttons.leftTrigger = leftTriggerPressed;
         this.controller.buttons.leftTriggerValue = clamp(leftTriggerValue, 0, 1);
         this.controller.buttons.leftBumper = leftBumperPressed;
@@ -195,7 +222,12 @@ class Game {
             this.togglePause();
         }
 
+        if (backPressed && !this.previousControllerButtons.back) {
+            this.toggleDebugUI();
+        }
+
         this.previousControllerButtons.start = startPressed;
+        this.previousControllerButtons.back = backPressed;
         this.previousControllerButtons.leftBumper = leftBumperPressed;
         this.previousControllerButtons.rightBumper = rightBumperPressed;
     }
@@ -1255,7 +1287,7 @@ class Player {
 
     updateTargeter(mouse, controller, world, camera) {
         const rightStick = controller?.rightStick || { x: 0, y: 0 };
-        const controllerDirection = { x: rightStick.x, y: -(rightStick.y) };
+        const controllerDirection = { x: rightStick.x, y: rightStick.y };
         const controllerResult = this.findDirectionalMetal(world, controllerDirection, 0.25);
 
         const worldMouseX = mouse.x + camera.x;
