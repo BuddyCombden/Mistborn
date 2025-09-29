@@ -1554,7 +1554,35 @@ class Player {
         }
 
         // Check collision with platforms
+        const chunkSize = world?.chunkSize ?? 480;
+        // Limit collision checks to the current chunk and the chunk we're moving toward
+        const currentChunk = Math.floor(this.x / chunkSize);
+        const fallbackDirection = (typeof this.facing === 'number' && this.facing < 0) ? -1 : 1;
+        const direction = this.vx !== 0 ? Math.sign(this.vx) : fallbackDirection;
+        const forwardEdgeX = direction >= 0 ? this.x + this.width / 2 : this.x - this.width / 2;
+        const movingChunk = Math.floor(forwardEdgeX / chunkSize);
+        const chunkRanges = [];
+        const checkedChunks = new Set();
+
+        for (const chunkIndex of [currentChunk, movingChunk]) {
+            if (checkedChunks.has(chunkIndex)) {
+                continue;
+            }
+
+            checkedChunks.add(chunkIndex);
+            const chunkStart = chunkIndex * chunkSize;
+            chunkRanges.push({ start: chunkStart, end: chunkStart + chunkSize });
+        }
+
         for (const platform of world.platforms) {
+            const platformStart = platform.x;
+            const platformEnd = platform.x + platform.width;
+            const intersectsRelevantChunk = chunkRanges.some(range => platformEnd > range.start && platformStart < range.end);
+
+            if (!intersectsRelevantChunk) {
+                continue;
+            }
+
             if (this.checkPlatformCollision(platform)) {
                 // Handle collision
                 if (this.vy > 0 && this.y - this.height / 2 < platform.y) {
