@@ -904,10 +904,11 @@ class Player {
         this.steelTarget = null;
         this.ironTarget = null;
         this.allomancyStrength = 0;
-        this.allomancyRange = 150;
+        this.allomancyRange = 200;
+        this.maxAllomancyConnections = 4;
 
         // Advanced allomancy movement
-        this.airAllomancyForce = 750;
+        this.airAllomancyForce = 900;
         this.shiftAllomancyMultiplier = 1.4;
         this.burstImpulse = 900;
         this.burstCooldownDuration = 2;
@@ -1152,7 +1153,7 @@ class Player {
             return;
         }
 
-        const metals = this.getNearbyMetals(world, 5);
+        const metals = this.getNearbyMetals(world, this.maxAllomancyConnections);
         if (!metals.length) {
             this.airAllomancyDirection = null;
             return;
@@ -1209,7 +1210,7 @@ class Player {
             return;
         }
 
-        const baseMetals = this.activeAirMetals.length ? this.activeAirMetals : this.getNearbyMetals(world, 5);
+        const baseMetals = this.activeAirMetals.length ? this.activeAirMetals : this.getNearbyMetals(world, this.maxAllomancyConnections);
         const metals = baseMetals.slice(0, 5);
         if (!metals.length) {
             return;
@@ -1916,7 +1917,7 @@ class Player {
 
         world.metalVials = world.metalVials.filter(vial => {
             const radius = vial.pickupRadius ?? 18;
-            const centerY = (vial.baseY ?? 0) - (vial.height ?? 18) * 0.6;
+            const centerY = vial.baseY - vial.height * 1.2;
             const dx = vial.x - playerCenterX;
             const dy = centerY - playerCenterY;
             if ((dx * dx + dy * dy) <= radius * radius) {
@@ -2121,7 +2122,7 @@ class Player {
         ctx.fill();
         
         // Launch Charged Outline
-        if (auraStrength >= 0.999 && this.burstCooldownRemaining <= 0) {
+        if (auraStrength >= 0.999 && this.burstCooldownRemaining <= 0 && (this.ironReserve > 0 && this.steelReserve > 0)) {
             ctx.strokeStyle = 'rgba(61, 85, 136, 0.65)';
         } else {
             ctx.strokeStyle = 'rgba(38, 54, 87, 0.71)';
@@ -2690,7 +2691,7 @@ class World {
             capHeight,
             height: bodyHeight + neckHeight + capHeight,
             bobSeed: Math.random() * Math.PI * 2,
-            pickupRadius: Math.max(width * 1.4, 14)
+            pickupRadius: Math.max(width * 1.5, 14)
         };
 
         this.metalVials.push(vial);
